@@ -1,0 +1,469 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NOTE: SQLite doesn't support enums or Json columns.
+// Category fields are stored as TEXT (same behavior, easy to filter).
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("RESEARCHER") // ADMIN | RESEARCHER | FARMER | VIEWER
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Species {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isDemo    Boolean  @default(false)
+  ponds     Pond[]
+  createdAt DateTime @default(now())
+}
+
+model Pond {
+  id              String    @id @default(cuid())
+  code            String    @unique // "Pond ID"
+  name            String
+  location        String?
+  speciesId       String?
+  species         Species?  @relation(fields: [speciesId], references: [id])
+  areaValue       Float?
+  areaUnit        String?
+  depthValue      Float?
+  depthUnit       String?
+  waterSource     String?
+  stockingDate    DateTime?
+  stockingDensity Float?
+  stockingCount   Int?
+  cultureType     String?
+  safetyConfig    String? // JSON text — PROTOTYPE CONFIGURATION thresholds
+  feedingConfig   String? // JSON text — schedule/method per pond
+  notes           String?
+  isDemo          Boolean   @default(false)
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  measurements    SensorMeasurement[]
+  activityRecords ActivityRecord[]
+  activitySignals ActivitySignal[]
+  feedingEvents   FeedingEvent[]
+  feedingTrays    FeedingTrayRecord[]
+  environmental   EnvironmentalRecord[]
+  healthRecords   HealthObservation[]
+  dailyLogs       DailyPondLog[]
+  feedbacks       FarmerFeedback[]
+  visits          FieldVisit[]
+  experiments     Experiment[]
+  aiDecisions     AiDecision[]
+  labels          MlLabel[]
+  alerts          Alert[]
+  photos          Photo[]
+}
+
+model MeasurementParameter {
+  id           String              @id @default(cuid())
+  name         String              @unique
+  unit         String?
+  category     String              @default("WATER_QUALITY")
+  description  String?
+  enabled      Boolean             @default(true)
+  minExpected  Float?
+  maxExpected  Float?
+  isDemo       Boolean             @default(false)
+  measurements SensorMeasurement[]
+  createdAt    DateTime            @default(now())
+}
+
+model Device {
+  id             String    @id @default(cuid())
+  name           String
+  type           String    @default("ESP32")
+  apiKey         String    @unique @default(cuid())
+  pondId         String?
+  lastHeartbeat  DateTime?
+  status         String    @default("OFFLINE")
+  pendingCommand String? // JSON text command for the device
+  commandAt      DateTime?
+  commandTakenAt DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+}
+
+model SensorMeasurement {
+  id          String                @id @default(cuid())
+  pondId      String
+  pond        Pond                  @relation(fields: [pondId], references: [id])
+  parameterId String
+  parameter   MeasurementParameter  @relation(fields: [parameterId], references: [id])
+  recordedAt  DateTime
+  value       Float?
+  textValue   String?
+  unit        String?
+  method      String?
+  source      String                @default("MANUAL") // MANUAL | ESP32 | IMPORTED_CSV | OTHER
+  dataQuality String                @default("GOOD") // GOOD | QUESTIONABLE | INVALID | MISSING
+  deviceId    String?
+  notes       String?
+  isDemo      Boolean               @default(false)
+  createdById String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([pondId, recordedAt])
+  @@index([parameterId, recordedAt])
+}
+
+model ActivityRecord {
+  id               String    @id @default(cuid())
+  pondId           String
+  pond             Pond      @relation(fields: [pondId], references: [id])
+  recordedAt       DateTime
+  durationMin      Float?
+  activityLevel    String? // VERY_LOW..VERY_HIGH
+  feedingResponse  String? // STRONG | MODERATE | WEAK | NONE | UNKNOWN
+  feedPresence     String?
+  surfaceCondition String?
+  behaviour        String?
+  weather          String?
+  rainfall         String?
+  wind             String?
+  aeratorStatus    String?
+  otherActivity    String?
+  notes            String?
+  experimentId     String?
+  source           String    @default("MANUAL")
+  isDemo           Boolean   @default(false)
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model ActivitySignal {
+  id            String   @id @default(cuid())
+  pondId        String
+  pond          Pond     @relation(fields: [pondId], references: [id])
+  recordedAt    DateTime
+  sensorId      String?
+  rawSignal     Float?
+  activityIndex Float? // 0..1 — manual now, ESP32 later
+  durationSec   Float?
+  quality       String?
+  position      String?
+  noise         String?
+  deviceId      String?
+  notes         String?
+  source        String   @default("MANUAL")
+  isDemo        Boolean  @default(false)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model FeedingEvent {
+  id             String   @id @default(cuid())
+  pondId         String
+  pond           Pond     @relation(fields: [pondId], references: [id])
+  recordedAt     DateTime
+  feedType       String?
+  amount         Float?
+  unit           String?
+  method         String?
+  durationMin    Float?
+  activityBefore String? // activity level before feeding
+  activityDuring String?
+  activityAfter  String?
+  consumption    String? // FULL | MOSTLY | PARTIAL | SIGNIFICANT_REMAINING | UNKNOWN
+  response       String? // feeding response
+  remainingFeed  String?
+  weather        String?
+  doBefore       Float?
+  phBefore       Float?
+  tempBefore     Float?
+  automatic      Boolean  @default(false)
+  aiDecisionId   String?
+  actualDecision String?
+  notes          String?
+  experimentId   String?
+  source         String   @default("MANUAL")
+  isDemo         Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model FeedingTrayRecord {
+  id             String   @id @default(cuid())
+  pondId         String
+  pond           Pond     @relation(fields: [pondId], references: [id])
+  recordedAt     DateTime
+  trayId         String?
+  feedGiven      Float?
+  remainingFeed  Float?
+  consumption    String?
+  observationMin Float?
+  trayCondition  String?
+  notes          String?
+  isDemo         Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model EnvironmentalRecord {
+  id                String    @id @default(cuid())
+  pondId            String
+  pond              Pond      @relation(fields: [pondId], references: [id])
+  recordedAt        DateTime
+  airTemp           Float?
+  rainfall          String?
+  windCondition     String?
+  cloudCondition    String?
+  sunlight          String?
+  aeratorOn         String? // ON | OFF
+  aeratorCount      Int?
+  aeratorRuntimeMin Float?
+  aeratorNotes      String?
+  notes             String?
+  isDemo            Boolean   @default(false)
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model HealthObservation {
+  id                String   @id @default(cuid())
+  pondId            String
+  pond              Pond     @relation(fields: [pondId], references: [id])
+  recordedAt        DateTime
+  speciesName       String?
+  mortalityCount    Int?
+  observedCondition String?
+  unusualBehaviour  String?
+  diseaseSymptoms   String?
+  waterCondition    String?
+  notes             String?
+  isDemo            Boolean  @default(false)
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model DailyPondLog {
+  id               String   @id @default(cuid())
+  pondId           String
+  pond             Pond     @relation(fields: [pondId], references: [id])
+  date             DateTime
+  generalCondition String?
+  waterAppearance  String?
+  waterOdour       String?
+  surfaceActivity  String?
+  behaviour        String?
+  feedResponse     String?
+  mortalityCount   Int?
+  aeratorStatus    String?
+  weather          String?
+  rainfall         String?
+  diseaseSymptoms  String?
+  unusualEvents    String?
+  notes            String?
+  isDemo           Boolean  @default(false)
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([pondId, date])
+}
+
+model FarmerFeedback {
+  id                 String   @id @default(cuid())
+  date               DateTime
+  pondId             String?
+  pond               Pond?    @relation(fields: [pondId], references: [id])
+  observer           String?
+  problem            String?
+  currentPractice    String?
+  equipmentUsed      String?
+  mainDifficulty     String?
+  desiredImprovement String?
+  opinionAutoFeeding String?
+  opinionMonitoring  String?
+  notes              String?
+  isDemo             Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model FieldVisit {
+  id                    String   @id @default(cuid())
+  date                  DateTime
+  location              String?
+  pondId                String?
+  pond                  Pond?    @relation(fields: [pondId], references: [id])
+  observer              String?
+  purpose               String?
+  measurementsCollected String?
+  activitiesObserved    String?
+  farmerFeedback        String?
+  problemsIdentified    String?
+  followUpRequired      Boolean  @default(false)
+  notes                 String?
+  isDemo                Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Experiment {
+  id             String    @id @default(cuid())
+  name           String
+  objective      String?
+  pondId         String?
+  pond           Pond?     @relation(fields: [pondId], references: [id])
+  speciesName    String?
+  startDate      DateTime?
+  endDate        DateTime?
+  sensorSetup    String?
+  sensorPosition String?
+  feedingMethod  String?
+  variables      String? // JSON text
+  status         String    @default("PLANNED") // PLANNED | ACTIVE | COMPLETED
+  notes          String?
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model ExperimentRecord {
+  id           String   @id @default(cuid())
+  experimentId String
+  refType      String // e.g. "measurements", "feeding", "activity"
+  refId        String
+  note         String?
+  createdAt    DateTime @default(now())
+}
+
+model AiDecision {
+  id                  String   @id @default(cuid())
+  pondId              String?
+  pond                Pond?    @relation(fields: [pondId], references: [id])
+  recordedAt          DateTime @default(now())
+  doValue             Float?
+  phValue             Float?
+  tempValue           Float?
+  activityIndex       Float?
+  previousFeedAmount  Float?
+  weather             String?
+  mlRecommendation    String?
+  safetyStatus        String?
+  finalRecommendation String? // FEED | REDUCE_FEED | DELAY_FEED | DO_NOT_FEED | MANUAL_CHECK
+  actualFeedGiven     Float?
+  farmerOverride      Boolean  @default(false)
+  reason              String?
+  isDemo              Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([pondId, recordedAt])
+}
+
+model MlDataset {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  featureKeys String // JSON text — list of chosen features
+  targetKey   String
+  pondId      String?
+  fromDate    DateTime?
+  toDate      DateTime?
+  status      String    @default("NOT_TRAINED") // NOT_TRAINED | TRAINING | TRAINED | NEEDS_MORE_DATA
+  metrics     String? // JSON text — real metrics only after real training
+  sampleCount Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model MlLabel {
+  id          String   @id @default(cuid())
+  pondId      String?
+  pond        Pond?    @relation(fields: [pondId], references: [id])
+  recordedAt  DateTime?
+  refType     String?
+  refId       String?
+  summary     String?
+  labelValue  String? // e.g. POSITIVE_FEEDING_RESPONSE — changeable anytime
+  status      String   @default("UNLABELED") // UNLABELED | LABELED | NEEDS_REVIEW
+  notes       String?
+  labeledById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Alert {
+  id           String   @id @default(cuid())
+  pondId       String?
+  pond         Pond?    @relation(fields: [pondId], references: [id])
+  type         String
+  severity     String   @default("INFO")
+  message      String
+  acknowledged Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  pondId    String?
+  pond      Pond?    @relation(fields: [pondId], references: [id])
+  refType   String?
+  refId     String?
+  fileUrl   String
+  caption   String?
+  takenAt   DateTime?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userEmail String?
+  action    String // CREATE | UPDATE | DELETE
+  modelName String
+  recordId  String?
+  before    String? // JSON text snapshot
+  after     String? // JSON text snapshot
+  createdAt DateTime @default(now())
+}
+model AppSetting {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @updatedAt
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userEmail String?
+  createdAt DateTime @default(now())
+}
