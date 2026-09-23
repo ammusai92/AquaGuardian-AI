@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 let token = localStorage.getItem('ag_token') || '';
 export const setToken = (t) => {
   token = t || '';
