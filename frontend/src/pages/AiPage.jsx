@@ -17,9 +17,14 @@ export default function AiPage() {
   const recommend = async () => {
     setErr(''); setResult(null);
     try {
-      setResult(await api.post('/api/ai/recommend', { ...f,
-        do: f.do || undefined, ph: f.ph || undefined, temp: f.temp || undefined,
-        activityIndex: f.activityIndex === '' ? undefined : Number(f.activityIndex) }));
+      setResult(await api.post('/api/ai/recommend', {
+        pondId: f.pondId,
+        doValue: f.do === '' ? undefined : Number(f.do),
+        phValue: f.ph === '' ? undefined : Number(f.ph),
+        tempValue: f.temp === '' ? undefined : Number(f.temp),
+        activityIndex: f.activityIndex === '' ? undefined : Number(f.activityIndex),
+        weather: f.weather || undefined,
+      }));
       loadHistory();
     } catch (e) { setErr(e.message); }
   };
