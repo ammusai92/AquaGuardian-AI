@@ -127,7 +127,10 @@ r.get('/analytics', requireRole(), wrap(async (req, res) => {
 
 // ---------- AI RECOMMENDATION (safety first, ML optional, honest) ----------
 r.post('/ai/recommend', requireRole('ADMIN', 'RESEARCHER', 'FARMER'), wrap(async (req, res) => {
-  const { pondId, doValue, phValue, tempValue, activityIndex, weather } = req.body || {};
+    const { pondId, activityIndex, weather } = req.body || {};
+  const doValue = req.body.doValue ?? req.body.do;
+  const phValue = req.body.phValue ?? req.body.ph;
+  const tempValue = req.body.tempValue ?? req.body.temp;
   const pond = await prisma.pond.findUnique({ where: { id: pondId } });
   if (!pond) return res.status(404).json({ error: 'Pond not found' });
 
