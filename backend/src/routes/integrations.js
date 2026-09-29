@@ -156,6 +156,40 @@ r.post('/feeder/command', requireRole('ADMIN', 'RESEARCHER'), wrap(async (req, r
   res.json({ ok: true, note: 'Device will receive command on next poll' });
 }));
 
+// ---------- DEVICE INGEST: ESP32 posts sensor readings ----------
+r.post('/device/reading', deviceAuth, wrap(async (req, res) => {
+  if (!req.device) return res.status(401).json({ error: 'Invalid device key' });
+  const { pondCode, pondId, parameter, value, recordedAt } = req.body || {};
+  if (!parameter || value === undefined || value === null)
+    return res.status(400).json({ error: 'parameter and value required' });
+
+  let pond = null;
+  if (pondId) pond = await prisma.pond.findUnique({ where: { id: pondId } });
+  else if (pondCode) pond = await prisma.pond.findUnique({ where: { code: pondCode } });
+  else if (req.device.pondId) pond = await prisma.pond.findUnique({ where: { id: req.device.pondId } });
+  if (!pond) return res.status(404).json({ error: 'Pond not found (check pondCode or link the device to a pond)' });
+
+  const param = await prisma.measurementParameter.findFirst({ where: { name: parameter } });
+  if (!param) return res.status(404).json({ error: `Unknown parameter: ${parameter}` });
+
+  const num = Number(value);
+  if (isNaN(num)) return res.status(400).json({ error: 'value must be a number' });
+
+  const m = await prisma.sensorMeasurement.create({ data: {
+    pondId: pond.id,
+    parameterId: param.id,
+    recordedAt: recordedAt ? new Date(recordedAt) : new Date(),
+    value: num,
+    unit: param.unit || null,
+    method: 'ESP32',
+    source: 'ESP32',
+    dataQuality: 'GOOD',
+    deviceId: req.device.id,
+    isDemo: false,
+  }});
+  res.status(201).json({ ok: true, id: m.id });
+}));
+
 // ---------- SENSORS ----------
 r.get('/sensors/latest', requireAny(), wrap(async (req, res) => {
   const { pondId } = req.query;
